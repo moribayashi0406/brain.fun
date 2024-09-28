@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 
-declare_id!("Aoquk2SUkbeqcQxYoCok9wb9PPZgQxCQdDVF2SSb7MQD");
+declare_id!("EYBneqf153nZjsqXg9bv1oJMa3vq7opDcGqxELBVyfqd");
 
 #[program]
 pub mod solana_slot_program {
@@ -93,7 +93,7 @@ pub struct UpdatePlayCost<'info> {
 
 #[derive(Accounts)]
 pub struct CreateUser<'info> {
-    #[account(init, payer = owner, space = 8 + 32 + 1 + 4)]
+    #[account(init, seeds = [owner.key().as_ref()], bump, payer = owner, space = 8 + 32 + 1 + 4)]
     pub user_state: Account<'info, UserState>,
     #[account(mut)]
     pub owner: Signer<'info>,

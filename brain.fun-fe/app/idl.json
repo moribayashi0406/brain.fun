@@ -76,7 +76,7 @@
                 {
                     "name": "userState",
                     "isMut": true,
-                    "isSigner": true
+                    "isSigner": false
                 },
                 {
                     "name": "owner",

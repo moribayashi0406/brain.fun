@@ -23,8 +23,8 @@ import idl from "./idl.json"
 
 // プログラムIDとIDLの設定（IDLはプログラムのコンパイル時に生成されます）
 const programId = new
-  PublicKey('Aoquk2SUkbeqcQxYoCok9wb9PPZgQxCQdDVF2SSb7MQD');
-const globalStateId = new PublicKey("9YNfm5yj5hscWSLZmeE8MoJ3VNTWXiCF1odxrY2wy1Cv");
+  PublicKey('EYBneqf153nZjsqXg9bv1oJMa3vq7opDcGqxELBVyfqd');
+const globalStateId = new PublicKey("HKqzzmSMidmofFk6nHpV54ajFNALSnCTWp5Lwf6bCoN4");
 
 
 const WalletContextProvider = ({ children }: { children: React.ReactNode }) => {
@@ -67,15 +67,6 @@ const createUser = async (
     [wallet.publicKey.toBytes()],
     program.programId
   );
-  console.log("userStateId", userStateId.toString());
-
-  console.log({
-    owner: wallet.publicKey,
-    userState: userStateId,
-    globalState: globalStateId,
-    systemProgram: anchor.web3.SystemProgram.programId,
-  })
-
   return await program.methods
     .createUser()
     .accounts({
@@ -86,6 +77,8 @@ const createUser = async (
     })
     .rpc();
 }
+
+
 
 const play = async (
   wallet: AnchorWallet,
@@ -99,8 +92,6 @@ const play = async (
     [wallet.publicKey.toBytes()],
     program.programId
   );
-  console.log("userState", userStateId.toString());
-
   return await program.methods
     .play()
     .accounts({
@@ -147,7 +138,8 @@ const SlotMachine = () => {
       console.error('ウォレットが接続されていません。');
       return;
     }
-    createUser(wallet, connection);
+    const tx = createUser(wallet, connection);
+    console.log(tx);
   }
 
   const handlePlay = async () => {
@@ -156,7 +148,8 @@ const SlotMachine = () => {
       return;
     }
     setIsSpinning(true);
-    await play(wallet, connection);
+    const tx = await play(wallet, connection);
+    console.log(tx);
     setIsSpinning(false);
   }
 
