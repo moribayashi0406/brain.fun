@@ -60,7 +60,7 @@ const createUser = async (
   connection: Connection
 ) => {
   const provider = createProvider(wallet, connection);
-  const program = new Program(idl, programId, provider);
+  const program = new Program(idl as anchor.Idl, programId, provider);
 
   // PDAを算出
   const [userStateId] = PublicKey.findProgramAddressSync(
@@ -85,7 +85,7 @@ const play = async (
   connection: Connection
 ) => {
   const provider = createProvider(wallet, connection);
-  const program = new Program(idl, programId, provider);
+  const program = new Program(idl as anchor.Idl, programId, provider);
 
   // PDAを算出
   const [userStateId] = PublicKey.findProgramAddressSync(
@@ -101,6 +101,44 @@ const play = async (
       systemProgram: anchor.web3.SystemProgram.programId,
     })
     .rpc();
+}
+
+const getResult = async (connection: Connection, tx: string) => {
+  // トランザクションの確認
+  // const latestBlockHash = await connection.getLatestBlockhash();
+  // await connection.confirmTransaction(
+  //   {
+  //     blockhash: latestBlockHash.blockhash,
+  //     lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
+  //     signature: tx,
+  //   },
+  //   "confirmed"
+  // );
+
+  const resultTx = await connection.getTransaction(tx, {
+    maxSupportedTransactionVersion: 0,
+    commitment: "confirmed",
+  });
+  const result = resultTx?.meta?.logMessages?.[8]?.split(": ").pop();
+  return result;
+  // 結果の取得（この部分はプログラムの実装に依存します）
+  // 例: イベントをリッスンするか、状態を直接読み取る
+  // if (provider) {
+  //   const userState = await program.account.userState.fetch(provider.wallet.publicKey);
+  // }
+  // const gameResult = userState.lastResult; // lastResult フィールドが存在すると仮定
+
+  // // 結果の解釈
+  // const resultMap = {
+  //   0: 'Grape',
+  //   1: 'Cherry',
+  //   2: 'Replay',
+  //   3: 'BIG',
+  //   4: 'REG',
+  //   5: 'None'
+  // };
+
+  // setResult(resultMap[gameResult] || 'Unknown');
 }
 
 
@@ -150,9 +188,16 @@ const SlotMachine = () => {
     setIsSpinning(true);
     const tx = await play(wallet, connection);
     console.log(tx);
+    for (let i = 0; i < 100; i++) {
+      const result = await getResult(connection, tx);
+      if (result) {
+        setResult(result);
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
     setIsSpinning(false);
   }
-
 
   return (
     <div className={'bg-gray-800'}>
@@ -188,7 +233,7 @@ const SlotMachine = () => {
           {isSpinning ? 'スピン中...' : 'スピン！'}
         </button>
       </div>
-    </div>
+    </div >
   );
 };
 
