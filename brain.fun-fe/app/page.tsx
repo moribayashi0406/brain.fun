@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { AnchorWallet } from "@solana/wallet-adapter-react";
 import { Program } from '@project-serum/anchor';
@@ -17,7 +17,8 @@ import {
   PhantomWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
 import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
-import idl from "./idl.json"
+import idl from "./idl.json";
+
 
 
 
@@ -53,6 +54,25 @@ const createProvider = (wallet: AnchorWallet, connection: Connection) => {
   });
   anchor.setProvider(provider);
   return provider;
+}
+
+const getUserState = async (wallet: AnchorWallet,
+  connection: Connection) => {
+  const provider = createProvider(wallet, connection);
+  const program = new Program(idl as anchor.Idl, programId, provider);
+  // PDAを算出
+  const [userStateId] = PublicKey.findProgramAddressSync(
+    [wallet.publicKey.toBytes()],
+    program.programId
+  );
+  try {
+    const userState = await program.account.userState.fetch(userStateId);
+    return userState;
+  }
+  catch (e) {
+    return null;
+  }
+
 }
 
 const createUser = async (
@@ -103,81 +123,88 @@ const play = async (
     .rpc();
 }
 
-const getResult = async (connection: Connection, tx: string) => {
-  // トランザクションの確認
-  // const latestBlockHash = await connection.getLatestBlockhash();
-  // await connection.confirmTransaction(
-  //   {
-  //     blockhash: latestBlockHash.blockhash,
-  //     lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
-  //     signature: tx,
-  //   },
-  //   "confirmed"
-  // );
 
+
+const getResult = async (connection: Connection, tx: string) => {
   const resultTx = await connection.getTransaction(tx, {
     maxSupportedTransactionVersion: 0,
     commitment: "confirmed",
   });
   const result = resultTx?.meta?.logMessages?.[8]?.split(": ").pop();
   return result;
-  // 結果の取得（この部分はプログラムの実装に依存します）
-  // 例: イベントをリッスンするか、状態を直接読み取る
-  // if (provider) {
-  //   const userState = await program.account.userState.fetch(provider.wallet.publicKey);
-  // }
-  // const gameResult = userState.lastResult; // lastResult フィールドが存在すると仮定
-
-  // // 結果の解釈
-  // const resultMap = {
-  //   0: 'Grape',
-  //   1: 'Cherry',
-  //   2: 'Replay',
-  //   3: 'BIG',
-  //   4: 'REG',
-  //   5: 'None'
-  // };
-
-  // setResult(resultMap[gameResult] || 'Unknown');
 }
 
 
 const SlotMachine = () => {
   const [result, setResult] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
+  const [userState, setUserState] = useState<any>(null);
+  const [isJackpot, setIsJackpot] = useState(false);
+
 
   const { connection } = useConnection();
   const wallet = useAnchorWallet();
 
-  // トランザクションの確認
-  // await program.provider.connection.confirmTransaction(tx);
+  const [colorIndex, setColorIndex] = useState(0);
+  const audioRef = useRef(null);
 
-  // 結果の取得（この部分はプログラムの実装に依存します）
-  // 例: イベントをリッスンするか、状態を直接読み取る
-  // if (provider) {
-  //   const userState = await program.account.userState.fetch(provider.wallet.publicKey);
-  // }
-  // const gameResult = userState.lastResult; // lastResult フィールドが存在すると仮定
 
-  // // 結果の解釈
-  // const resultMap = {
-  //   0: 'Grape',
-  //   1: 'Cherry',
-  //   2: 'Replay',
-  //   3: 'BIG',
-  //   4: 'REG',
-  //   5: 'None'
-  // };
+  const flashingColors = [
+    'bg-red-500',
+    'bg-blue-500',
+    'bg-yellow-500',
+    'bg-green-500',
+    'bg-purple-500',
+    'bg-pink-500'
+  ];
 
-  // setResult(resultMap[gameResult] || 'Unknown');
+  const audio = new Audio("/kyuin.mp3");
+
+
+  useEffect(() => {
+    if (isJackpot) {
+      const interval = setInterval(() => {
+        setColorIndex((prevIndex) => (prevIndex + 1) % flashingColors.length);
+      }, 100); // 100ミリ秒ごとに色を変更
+
+      return () => clearInterval(interval);
+    } else {
+      setColorIndex(4);
+    }
+  }, [flashingColors.length, isJackpot]);
+
+
+  useEffect(() => {
+    const func = async () => {
+      if (!wallet) {
+        return;
+      }
+      const userStateRes = await getUserState(wallet, connection);
+      setUserState(userStateRes);
+    }
+    func();
+  }, [wallet, connection]);
+
+
 
   const handleCreateUser = async () => {
     if (!wallet) {
       console.error('ウォレットが接続されていません。');
       return;
     }
+    setIsCreating(true);
     const tx = createUser(wallet, connection);
     console.log(tx);
+    for (let i = 0; i < 100; i++) {
+      const result = await getUserState(wallet, connection);
+      if (result) {
+        setUserState(result);
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    setIsCreating(false);
   }
 
   const handlePlay = async () => {
@@ -192,6 +219,15 @@ const SlotMachine = () => {
       const result = await getResult(connection, tx);
       if (result) {
         setResult(result);
+        if (result != "None" && result != "Replay") {
+          setIsJackpot(true);
+          audio.currentTime = 0;
+          audio.play();
+          setTimeout(() => {
+            setIsJackpot(false);
+            audio.pause();
+          }, 5000);
+        }
         break;
       }
       await new Promise((resolve) => setTimeout(resolve, 200));
@@ -199,8 +235,12 @@ const SlotMachine = () => {
     setIsSpinning(false);
   }
 
+
+
+
   return (
-    <div className={'bg-gray-800'}>
+    <div className={`w-full h-full absolute ${isJackpot ? flashingColors[colorIndex] : 'bg-gray-800'} transition-colors duration-100`}>
+      <audio ref={audioRef} src="./kyuin.mp3" />
       <div
         className={
           'flex justify-end pt-8 pr-8'
@@ -209,29 +249,30 @@ const SlotMachine = () => {
         <WalletMultiButton />
       </div>
       <div className="flex flex-col items-center justify-center h-screen">
-
-        <motion.div
-          className="text-6xl font-bold mb-8 text-white"
-          animate={{
-            y: isSpinning ? [0, -20, 20, -20, 20, 0] : 0,
-            rotate: isSpinning ? [0, -10, 10, -10, 10, 0] : 0
-          }}
-          transition={{ duration: 0.5, repeat: isSpinning ? Infinity : 0 }}
-        >
-          {isSpinning ? '?' : result || '?'}
-        </motion.div>
-        <button
-          className="px-6 py-3 bg-yellow-500 text-white rounded-full font-bold text-xl hover:bg-yellow-600 transition-colors w-40 mb-2"
-          onClick={handleCreateUser}>
-          {"ユーザ作成"}
-        </button>
-        <button
-          className="px-6 py-3 bg-yellow-500 text-white rounded-full font-bold text-xl hover:bg-yellow-600 transition-colors w-40"
-          onClick={handlePlay}
-          disabled={isSpinning}
-        >
-          {isSpinning ? 'スピン中...' : 'スピン！'}
-        </button>
+        <div className={isJackpot ? "animate-bounce" : ""}>
+          <motion.div
+            className="text-6xl font-bold mb-8 text-white"
+            animate={{
+              y: isSpinning ? [0, -20, 20, -20, 20, 0] : 0,
+              rotate: isSpinning ? [0, -10, 10, -10, 10, 0] : 0
+            }}
+            transition={{ duration: 0.5, repeat: isSpinning ? Infinity : 0 }}
+          >
+            {isSpinning ? '?' : result || '?'}
+          </motion.div>
+        </div>
+        {userState ?
+          <button suppressHydrationWarning
+            className="px-6 py-3 bg-yellow-500 text-white rounded-full font-bold text-xl hover:bg-yellow-600 transition-colors w-56"
+            onClick={handlePlay}
+            disabled={isSpinning}
+          ><p>{isSpinning ? 'Spinning...' : 'Spin！'}</p >
+          </button> :
+          <button suppressHydrationWarning
+            className="px-6 py-3 bg-yellow-500 text-white rounded-full font-bold text-xl hover:bg-yellow-600 transition-colors w-56 mb-2"
+            onClick={handleCreateUser}>
+            <p>{isCreating ? "Creating..." : "Create Account"}</p >
+          </button>}
       </div>
     </div >
   );
@@ -242,9 +283,11 @@ const SlotMachine = () => {
 
 const App = () => {
   return (
-    <WalletContextProvider>
+
+    <WalletContextProvider >
       <SlotMachine />
     </WalletContextProvider>
+
   );
 };
 
